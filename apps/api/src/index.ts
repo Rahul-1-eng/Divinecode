@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
+import { connectDB } from './db';
+import { saveContestDocument, saveSubmissionDocument, upsertGoogleUser } from './storage';
 
 const app = express();
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
@@ -68,12 +70,14 @@ function rebuildStandings(contest: Contest) {
     return { memberId: member.id, name: member.name, solved: memberSolves.length, penalty, score: memberSolves.length * 1000 - penalty, solvedProblems };
   }).sort((a, b) => b.solved - a.solved || a.penalty - b.penalty || a.name.localeCompare(b.name));
 }
+async function persistContest(contest: Contest) { saveContestDocument(contest).catch((error) => console.error('Could not persist contest:', error instanceof Error ? error.message : error)); }
 function recordSolve(contest: Contest, memberId: string, problemId: string) {
   const existing = contest.solves.find((s) => s.memberId === memberId && s.problemId === problemId);
   if (existing) return existing;
   const solve = { memberId, problemId, solvedAtMinute: getContestMinute(contest), attempts: 1 };
   contest.solves.push(solve);
   rebuildStandings(contest);
+  persistContest(contest);
   return solve;
 }
 function serializeContestList(contest: Contest) {
@@ -81,6 +85,14 @@ function serializeContestList(contest: Contest) {
 }
 
 app.get('/', (_req, res) => res.json({ status: 'ok', app: 'DivineCode API' }));
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const user = await upsertGoogleUser(req.body);
+    return res.json({ ok: true, user });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Could not save Google user' });
+  }
+});
 app.get('/api/problems', (_req, res) => res.json(problems.map(({ stdin, expectedOutput, ...safeProblem }) => safeProblem)));
 app.get('/api/problems/:id', (req, res) => {
   const problem = problems.find((item) => item.id === Number(req.params.id));
@@ -109,6 +121,7 @@ app.post('/api/contests', (req, res) => {
   const contest: Contest = { id: id('contest'), title: String(title).trim(), description: String(description || 'Private group contest room'), startTime: startTime || new Date().toISOString(), durationMinutes: Math.max(1, Number(durationMinutes || 120)), isRated: Boolean(isRated), members: safeMembers, problems: safeProblems, solves: [], standings: [], questions: generateMcqsFromProblems(safeProblems), createdAt: new Date().toISOString() };
   rebuildStandings(contest);
   contests.set(contest.id, contest);
+  persistContest(contest);
   return res.status(201).json(contest);
 });
 app.get('/api/contests/:id', (req, res) => {
@@ -124,6 +137,7 @@ app.post('/api/contests/:id/members', (req, res) => {
     if (!contest.members.some((member) => member.name.toLowerCase() === name.toLowerCase())) contest.members.push({ id: id('member'), name, handle: slugHandle(name) });
   });
   rebuildStandings(contest);
+  persistContest(contest);
   return res.json(contest);
 });
 app.post('/api/contests/:id/problems', (req, res) => {
@@ -135,6 +149,7 @@ app.post('/api/contests/:id/problems', (req, res) => {
   contest.problems.push(problem);
   contest.questions = generateMcqsFromProblems(contest.problems);
   rebuildStandings(contest);
+  persistContest(contest);
   return res.json(contest);
 });
 app.post('/api/contests/:id/solve', (req, res) => {
@@ -153,6 +168,7 @@ app.post('/api/contests/:id/unsolve', (req, res) => {
   const { memberId, problemId } = req.body;
   contest.solves = contest.solves.filter((s) => !(s.memberId === memberId && s.problemId === problemId));
   rebuildStandings(contest);
+  persistContest(contest);
   return res.json(contest);
 });
 
@@ -170,7 +186,7 @@ async function runWithJudge0(params: { sourceCode: string; language: JudgeLangua
 }
 app.post('/api/submit', async (req, res) => {
   try {
-    const { code, language, problemId, contestId, memberId } = req.body;
+    const { code, language, problemId, contestId, memberId, userId } = req.body;
     if (!code || !language || !problemId) return res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' });
     if (!languageMap[language as JudgeLanguage]) return res.status(400).json({ verdict: 'Rejected', message: 'Unsupported language' });
     let stdin = '';
@@ -191,6 +207,7 @@ app.post('/api/submit', async (req, res) => {
     }
     const result = await runWithJudge0({ sourceCode: code, language: language as JudgeLanguage, stdin, expectedOutput });
     if ((result.verdict === 'Accepted' || result.verdict === 'Mock Accepted') && contest && memberId) recordSolve(contest, String(memberId), String(problemId));
+    saveSubmissionDocument({ userId, memberId, contestId, problemId, language, code, verdict: result.verdict, message: result.message, stdout: result.stdout, stderr: result.stderr, compileOutput: result.compile_output, time: result.time ? String(result.time) : undefined, memory: typeof result.memory === 'number' ? result.memory : undefined }).catch((error) => console.error('Could not save submission:', error instanceof Error ? error.message : error));
     return res.json({ ...result, language, problemId, contestId: contest?.id, standings: contest?.standings || null });
   } catch (error) {
     return res.status(500).json({ verdict: 'Server Error', message: error instanceof Error ? error.message : 'Unknown error' });
@@ -217,5 +234,7 @@ io.on('connection', (socket) => {
   });
   socket.on('disconnect', () => { const waitingIndex = waitingPlayers.findIndex((p) => p.id === socket.id); if (waitingIndex >= 0) waitingPlayers.splice(waitingIndex, 1); });
 });
+
+connectDB().catch((error) => console.error('Initial MongoDB connection failed:', error instanceof Error ? error.message : error));
 const PORT = Number(process.env.PORT) || 4000;
 server.listen(PORT, () => console.log(`DivineCode API and duel socket server running on port ${PORT}`));
