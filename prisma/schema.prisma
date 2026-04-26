@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Verdict {
+  ACCEPTED
+  WRONG_ANSWER
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  JUDGE_ERROR
+  PENDING
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  rating       Int      @default(1200)
+  duelRating   Int      @default(1200)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submissions  Submission[]
+  contestMembers ContestMember[]
+  ratingHistory RatingHistory[]
+}
+
+model Problem {
+  id             String   @id @default(cuid())
+  title          String
+  slug           String   @unique
+  statement      String
+  platform       String   @default("DivineCode")
+  externalUrl    String?
+  difficulty     String?
+  tags           String[]
+  sampleInput    String?
+  sampleOutput   String?
+  hiddenInput    String?
+  hiddenOutput   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  submissions    Submission[]
+  contestProblems ContestProblem[]
+}
+
+model Submission {
+  id          String   @id @default(cuid())
+  code        String
+  language    String
+  verdict     Verdict  @default(PENDING)
+  stdout      String?
+  stderr      String?
+  time        String?
+  memory      Int?
+  userId      String?
+  problemId   String
+  contestId   String?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+  problem     Problem  @relation(fields: [problemId], references: [id])
+  contest     Contest? @relation(fields: [contestId], references: [id])
+}
+
+model Contest {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+  inviteCode      String   @unique
+  startTime       DateTime
+  durationMinutes Int      @default(120)
+  isRated         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members         ContestMember[]
+  problems        ContestProblem[]
+  submissions     Submission[]
+}
+
+model ContestMember {
+  id        String   @id @default(cuid())
+  contestId String
+  userId    String?
+  name      String
+  handle    String?
+  joinedAt  DateTime @default(now())
+
+  contest   Contest @relation(fields: [contestId], references: [id])
+  user      User?   @relation(fields: [userId], references: [id])
+}
+
+model ContestProblem {
+  id        String  @id @default(cuid())
+  contestId String
+  problemId String?
+  title     String
+  platform  String
+  externalUrl String
+  difficulty String?
+  tags      String[]
+  index     Int
+
+  contest   Contest @relation(fields: [contestId], references: [id])
+  problem   Problem? @relation(fields: [problemId], references: [id])
+}
+
+model DuelMatch {
+  id        String   @id @default(cuid())
+  playerA   String
+  playerB   String
+  scoreA    Int      @default(0)
+  scoreB    Int      @default(0)
+  winner    String?
+  createdAt DateTime @default(now())
+}
+
+model RatingHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  oldRating Int
+  newRating Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+}
