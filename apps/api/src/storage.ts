@@ -6,7 +6,8 @@ import { UserModel } from './models/User';
 export async function upsertGoogleUser(input: { name?: string; email?: string; avatar?: string; googleId?: string }) {
   await connectDB();
   if (!input.email) throw new Error('Email is required');
-  return UserModel.findOneAndUpdate(
+
+  return (UserModel as any).findOneAndUpdate(
     { email: input.email },
     {
       $set: {
@@ -23,7 +24,8 @@ export async function upsertGoogleUser(input: { name?: string; email?: string; a
 
 export async function saveContestDocument(contest: any) {
   await connectDB();
-  return ContestModel.findOneAndUpdate(
+
+  return (ContestModel as any).findOneAndUpdate(
     { _id: contest.id },
     {
       $set: {
@@ -42,5 +44,5 @@ export async function saveContestDocument(contest: any) {
 
 export async function saveSubmissionDocument(input: any) {
   await connectDB();
-  return SubmissionModel.create(input);
+  return (SubmissionModel as any).create(input);
 }
