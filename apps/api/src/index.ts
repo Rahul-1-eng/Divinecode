@@ -70,7 +70,9 @@ function rebuildStandings(contest: Contest) {
     return { memberId: member.id, name: member.name, solved: memberSolves.length, penalty, score: memberSolves.length * 1000 - penalty, solvedProblems };
   }).sort((a, b) => b.solved - a.solved || a.penalty - b.penalty || a.name.localeCompare(b.name));
 }
-async function persistContest(contest: Contest) { saveContestDocument(contest).catch((error) => console.error('Could not persist contest:', error instanceof Error ? error.message : error)); }
+function persistContest(contest: Contest) {
+  void saveContestDocument(contest).catch((error) => console.error('Could not persist contest:', error instanceof Error ? error.message : error));
+}
 function recordSolve(contest: Contest, memberId: string, problemId: string) {
   const existing = contest.solves.find((s) => s.memberId === memberId && s.problemId === problemId);
   if (existing) return existing;
@@ -84,92 +86,92 @@ function serializeContestList(contest: Contest) {
   return { id: contest.id, title: contest.title, description: contest.description, startTime: contest.startTime, durationMinutes: contest.durationMinutes, isRated: contest.isRated, membersCount: contest.members.length, problemsCount: contest.problems.length, questionCount: contest.questions.length, createdAt: contest.createdAt };
 }
 
-app.get('/', (_req, res) => res.json({ status: 'ok', app: 'DivineCode API' }));
+app.get('/', (_req, res) => { res.json({ status: 'ok', app: 'DivineCode API' }); });
 app.post('/api/auth/google', async (req, res) => {
   try {
     const user = await upsertGoogleUser(req.body);
-    return res.json({ ok: true, user });
+    res.json({ ok: true, user });
   } catch (error) {
-    return res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Could not save Google user' });
+    res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Could not save Google user' });
   }
 });
-app.get('/api/problems', (_req, res) => res.json(problems.map(({ stdin, expectedOutput, ...safeProblem }) => safeProblem)));
+app.get('/api/problems', (_req, res) => { res.json(problems.map(({ stdin, expectedOutput, ...safeProblem }) => safeProblem)); });
 app.get('/api/problems/:id', (req, res) => {
   const problem = problems.find((item) => item.id === Number(req.params.id));
-  if (!problem) return res.status(404).json({ error: 'Problem not found' });
+  if (!problem) { res.status(404).json({ error: 'Problem not found' }); return; }
   const { stdin, expectedOutput, ...safeProblem } = problem;
-  return res.json(safeProblem);
+  res.json(safeProblem);
 });
 app.get('/api/members/suggestions', (_req, res) => {
   const existing = [...contests.values()].flatMap((contest) => contest.members.map((member) => member.name));
   res.json(uniqueByName([...existing, 'Rahul', 'Code Warrior', 'Team Alpha', 'Team Beta', 'Tourist', 'Petr', 'Benq', 'Errichto']));
 });
-app.get('/api/contests', (_req, res) => res.json([...contests.values()].map(serializeContestList)));
+app.get('/api/contests', (_req, res) => { res.json([...contests.values()].map(serializeContestList)); });
 app.post('/api/contests', (req, res) => {
   const { title, description, startTime, durationMinutes, isRated, members, problems: contestProblems } = req.body;
-  if (!String(title || '').trim()) return res.status(400).json({ error: 'Contest title is required' });
+  if (!String(title || '').trim()) { res.status(400).json({ error: 'Contest title is required' }); return; }
   const safeMembers: ContestMember[] = uniqueByName(Array.isArray(members) ? members : []).map((name) => ({ id: id('member'), name, handle: slugHandle(name) }));
   const safeProblems: ContestProblem[] = Array.isArray(contestProblems) ? contestProblems.map((p: any) => {
     const platform = String(p.platform || 'External');
     const contestCode = String(p.contestCode || '');
     const problemIndex = String(p.problemIndex || '');
     const url = buildProblemUrl(platform, contestCode, problemIndex, String(p.url || ''));
-    return { id: id('problem'), title: String(p.title || `${platform} ${contestCode}${problemIndex}`).trim(), platform, url, difficulty: p.difficulty ? String(p.difficulty) : problemIndex || undefined, tags: String(p.tags || platform).split(',').map((t) => t.trim()).filter(Boolean), stdin: String(p.stdin || ''), expectedOutput: String(p.expectedOutput || '') };
+    return { id: id('problem'), title: String(p.title || `${platform} ${contestCode}${problemIndex}`).trim(), platform, url, difficulty: p.difficulty ? String(p.difficulty) : problemIndex || undefined, tags: String(p.tags || platform).split(',').map((t: string) => t.trim()).filter(Boolean), stdin: String(p.stdin || ''), expectedOutput: String(p.expectedOutput || '') };
   }).filter((p) => p.title && p.url) : [];
-  if (safeMembers.length === 0) return res.status(400).json({ error: 'Add at least one contest member' });
-  if (safeProblems.length === 0) return res.status(400).json({ error: 'Add at least one valid problem with a platform code or URL' });
+  if (safeMembers.length === 0) { res.status(400).json({ error: 'Add at least one contest member' }); return; }
+  if (safeProblems.length === 0) { res.status(400).json({ error: 'Add at least one valid problem with a platform code or URL' }); return; }
   const contest: Contest = { id: id('contest'), title: String(title).trim(), description: String(description || 'Private group contest room'), startTime: startTime || new Date().toISOString(), durationMinutes: Math.max(1, Number(durationMinutes || 120)), isRated: Boolean(isRated), members: safeMembers, problems: safeProblems, solves: [], standings: [], questions: generateMcqsFromProblems(safeProblems), createdAt: new Date().toISOString() };
   rebuildStandings(contest);
   contests.set(contest.id, contest);
   persistContest(contest);
-  return res.status(201).json(contest);
+  res.status(201).json(contest);
 });
 app.get('/api/contests/:id', (req, res) => {
   const contest = contests.get(req.params.id);
-  if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  if (!contest) { res.status(404).json({ error: 'Contest not found' }); return; }
   rebuildStandings(contest);
-  return res.json(contest);
+  res.json(contest);
 });
 app.post('/api/contests/:id/members', (req, res) => {
   const contest = contests.get(req.params.id);
-  if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  if (!contest) { res.status(404).json({ error: 'Contest not found' }); return; }
   uniqueByName(Array.isArray(req.body.members) ? req.body.members : [req.body.name]).forEach((name) => {
     if (!contest.members.some((member) => member.name.toLowerCase() === name.toLowerCase())) contest.members.push({ id: id('member'), name, handle: slugHandle(name) });
   });
   rebuildStandings(contest);
   persistContest(contest);
-  return res.json(contest);
+  res.json(contest);
 });
 app.post('/api/contests/:id/problems', (req, res) => {
   const contest = contests.get(req.params.id);
-  if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  if (!contest) { res.status(404).json({ error: 'Contest not found' }); return; }
   const platform = String(req.body.platform || 'External');
-  const problem: ContestProblem = { id: id('problem'), title: String(req.body.title || 'Untitled Problem'), platform, url: buildProblemUrl(platform, String(req.body.contestCode || ''), String(req.body.problemIndex || ''), String(req.body.url || '')), difficulty: req.body.difficulty ? String(req.body.difficulty) : undefined, tags: String(req.body.tags || platform).split(',').map((t) => t.trim()).filter(Boolean), stdin: String(req.body.stdin || ''), expectedOutput: String(req.body.expectedOutput || '') };
-  if (!problem.url) return res.status(400).json({ error: 'Problem URL is required' });
+  const problem: ContestProblem = { id: id('problem'), title: String(req.body.title || 'Untitled Problem'), platform, url: buildProblemUrl(platform, String(req.body.contestCode || ''), String(req.body.problemIndex || ''), String(req.body.url || '')), difficulty: req.body.difficulty ? String(req.body.difficulty) : undefined, tags: String(req.body.tags || platform).split(',').map((t: string) => t.trim()).filter(Boolean), stdin: String(req.body.stdin || ''), expectedOutput: String(req.body.expectedOutput || '') };
+  if (!problem.url) { res.status(400).json({ error: 'Problem URL is required' }); return; }
   contest.problems.push(problem);
   contest.questions = generateMcqsFromProblems(contest.problems);
   rebuildStandings(contest);
   persistContest(contest);
-  return res.json(contest);
+  res.json(contest);
 });
 app.post('/api/contests/:id/solve', (req, res) => {
   const contest = contests.get(req.params.id);
-  if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  if (!contest) { res.status(404).json({ error: 'Contest not found' }); return; }
   const { memberId, problemId } = req.body;
   const member = contest.members.find((m) => m.id === memberId);
   const problem = contest.problems.find((p) => p.id === problemId);
-  if (!member || !problem) return res.status(400).json({ error: 'Invalid member or problem' });
+  if (!member || !problem) { res.status(400).json({ error: 'Invalid member or problem' }); return; }
   recordSolve(contest, memberId, problemId);
-  return res.json(contest);
+  res.json(contest);
 });
 app.post('/api/contests/:id/unsolve', (req, res) => {
   const contest = contests.get(req.params.id);
-  if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  if (!contest) { res.status(404).json({ error: 'Contest not found' }); return; }
   const { memberId, problemId } = req.body;
   contest.solves = contest.solves.filter((s) => !(s.memberId === memberId && s.problemId === problemId));
   rebuildStandings(contest);
   persistContest(contest);
-  return res.json(contest);
+  res.json(contest);
 });
 
 async function runWithJudge0(params: { sourceCode: string; language: JudgeLanguage; stdin: string; expectedOutput: string }) {
@@ -187,30 +189,30 @@ async function runWithJudge0(params: { sourceCode: string; language: JudgeLangua
 app.post('/api/submit', async (req, res) => {
   try {
     const { code, language, problemId, contestId, memberId, userId } = req.body;
-    if (!code || !language || !problemId) return res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' });
-    if (!languageMap[language as JudgeLanguage]) return res.status(400).json({ verdict: 'Rejected', message: 'Unsupported language' });
+    if (!code || !language || !problemId) { res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' }); return; }
+    if (!languageMap[language as JudgeLanguage]) { res.status(400).json({ verdict: 'Rejected', message: 'Unsupported language' }); return; }
     let stdin = '';
     let expectedOutput = '';
     let contest: Contest | undefined;
     if (contestId) {
       contest = contests.get(String(contestId));
-      if (!contest) return res.status(404).json({ verdict: 'Rejected', message: 'Contest not found' });
+      if (!contest) { res.status(404).json({ verdict: 'Rejected', message: 'Contest not found' }); return; }
       const contestProblem = contest.problems.find((item) => item.id === String(problemId));
-      if (!contestProblem) return res.status(404).json({ verdict: 'Rejected', message: 'Contest problem not found' });
+      if (!contestProblem) { res.status(404).json({ verdict: 'Rejected', message: 'Contest problem not found' }); return; }
       stdin = contestProblem.stdin || '';
       expectedOutput = contestProblem.expectedOutput || '';
     } else {
       const problem = problems.find((item) => item.id === Number(problemId));
-      if (!problem) return res.status(404).json({ verdict: 'Rejected', message: 'Problem not found' });
+      if (!problem) { res.status(404).json({ verdict: 'Rejected', message: 'Problem not found' }); return; }
       stdin = problem.stdin;
       expectedOutput = problem.expectedOutput;
     }
     const result = await runWithJudge0({ sourceCode: code, language: language as JudgeLanguage, stdin, expectedOutput });
     if ((result.verdict === 'Accepted' || result.verdict === 'Mock Accepted') && contest && memberId) recordSolve(contest, String(memberId), String(problemId));
-    saveSubmissionDocument({ userId, memberId, contestId, problemId, language, code, verdict: result.verdict, message: result.message, stdout: result.stdout, stderr: result.stderr, compileOutput: result.compile_output, time: result.time ? String(result.time) : undefined, memory: typeof result.memory === 'number' ? result.memory : undefined }).catch((error) => console.error('Could not save submission:', error instanceof Error ? error.message : error));
-    return res.json({ ...result, language, problemId, contestId: contest?.id, standings: contest?.standings || null });
+    void saveSubmissionDocument({ userId, memberId, contestId, problemId, language, code, verdict: result.verdict, message: result.message, stdout: result.stdout, stderr: result.stderr, compileOutput: result.compile_output, time: result.time ? String(result.time) : undefined, memory: typeof result.memory === 'number' ? result.memory : undefined }).catch((error) => console.error('Could not save submission:', error instanceof Error ? error.message : error));
+    res.json({ ...result, language, problemId, contestId: contest?.id, standings: contest?.standings || null });
   } catch (error) {
-    return res.status(500).json({ verdict: 'Server Error', message: error instanceof Error ? error.message : 'Unknown error' });
+    res.status(500).json({ verdict: 'Server Error', message: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 function publicQuestion(room: DuelRoom) { const q = room.questions[room.questionIndex]; return { id: q.id, question: q.question, options: q.options, concept: q.concept, number: room.questionIndex + 1, total: room.questions.length }; }
@@ -235,6 +237,6 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => { const waitingIndex = waitingPlayers.findIndex((p) => p.id === socket.id); if (waitingIndex >= 0) waitingPlayers.splice(waitingIndex, 1); });
 });
 
-connectDB().catch((error) => console.error('Initial MongoDB connection failed:', error instanceof Error ? error.message : error));
+void connectDB().catch((error) => console.error('Initial MongoDB connection failed:', error instanceof Error ? error.message : error));
 const PORT = Number(process.env.PORT) || 4000;
 server.listen(PORT, () => console.log(`DivineCode API and duel socket server running on port ${PORT}`));
