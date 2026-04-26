@@ -1,114 +1,109 @@
 # DivineCode Deployment Guide
 
+Live URLs:
+
+- Frontend: `https://divinecode-web.vercel.app`
+- Backend: `https://divinecode.onrender.com`
+
 This repo is a monorepo with:
 
 - `apps/web` — Next.js frontend for Vercel
 - `apps/api` — Express + Socket.IO backend for Render
 
-## 1. Backend on Render
+## Current remaining setup
 
-Your backend URL:
+You said Google OAuth and database setup are not done yet. Complete these before expecting login and persistent contests to work in production.
+
+## 1. Render backend settings
+
+Render service URL:
 
 ```txt
 https://divinecode.onrender.com
 ```
 
-Render settings:
+Settings:
 
 - Root directory: `apps/api`
 - Build command: `npm install && npm run build`
 - Start command: `npm run start`
 - Runtime: Node
 
-## 2. Frontend on Vercel
+Set `CLIENT_ORIGIN` to:
 
-Import this GitHub repository in Vercel.
+```txt
+https://divinecode-web.vercel.app
+```
+
+## 2. Vercel frontend settings
+
+Vercel URL:
+
+```txt
+https://divinecode-web.vercel.app
+```
 
 Settings:
 
 - Framework: Next.js
 - Root directory: `apps/web`
 - Build command: `npm run build`
-- Output: default Next.js output
-
-After deploy, copy the Vercel frontend URL. Example:
-
-```txt
-https://divinecode.vercel.app
-```
-
-Then update Render `CLIENT_ORIGIN` to the Vercel URL.
 
 ## 3. Google OAuth redirect URLs
 
-In Google Cloud Console, add these authorized redirect URIs:
+In Google Cloud Console, add:
 
-Local:
+```txt
+https://divinecode-web.vercel.app/api/auth/callback/google
+```
+
+Optional local callback:
 
 ```txt
 http://localhost:3000/api/auth/callback/google
 ```
 
-Production:
+## 4. MongoDB Atlas setup
+
+Create a MongoDB Atlas cluster and database named:
 
 ```txt
-https://YOUR_VERCEL_APP.vercel.app/api/auth/callback/google
+divinecode
 ```
 
-## 4. Judge0
-
-If using a hosted Judge0 service, set `JUDGE0_URL` to that base URL.
-
-If running local Judge0, set:
+Allow network access from Render. For quick setup, allow access from anywhere:
 
 ```txt
-JUDGE0_URL=http://localhost:2358
+0.0.0.0/0
 ```
 
-For Render production, use a reachable public Judge0 URL.
+Create a database user and copy the MongoDB connection string.
+
+## 5. Judge0
+
+Use a public reachable Judge0 endpoint for production. Local Judge0 only works locally.
 
 ## Final env values
 
-### apps/api on Render
+### Render backend
 
 ```env
 PORT=4000
-CLIENT_ORIGIN=https://YOUR_VERCEL_APP.vercel.app
+CLIENT_ORIGIN=https://divinecode-web.vercel.app
 MONGODB_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/divinecode
 MONGODB_DB=divinecode
 JUDGE0_URL=https://YOUR_JUDGE0_URL
 ```
 
-### apps/web on Vercel
+### Vercel frontend
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=https://divinecode.onrender.com
 NEXT_PUBLIC_SOCKET_URL=https://divinecode.onrender.com
-NEXTAUTH_URL=https://YOUR_VERCEL_APP.vercel.app
+NEXTAUTH_URL=https://divinecode-web.vercel.app
 NEXTAUTH_SECRET=generate-a-strong-random-secret
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-```
-
-### Local frontend: apps/web/.env.local
-
-```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
-NEXT_PUBLIC_SOCKET_URL=http://localhost:4000
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=local-dev-secret-change-this
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-```
-
-### Local backend: apps/api/.env
-
-```env
-PORT=4000
-CLIENT_ORIGIN=http://localhost:3000
-MONGODB_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/divinecode
-MONGODB_DB=divinecode
-JUDGE0_URL=http://localhost:2358
 ```
 
 ## Local run
@@ -116,10 +111,4 @@ JUDGE0_URL=http://localhost:2358
 ```bash
 npm install
 npm run dev
-```
-
-Open:
-
-```txt
-http://localhost:3000
 ```
