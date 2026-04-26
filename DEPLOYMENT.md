@@ -5,26 +5,22 @@ This repo is a monorepo with:
 - `apps/web` — Next.js frontend for Vercel
 - `apps/api` — Express + Socket.IO backend for Render
 
-## 1. Backend deploy on Render
+## 1. Backend on Render
 
-Create a new **Web Service** on Render.
+Your backend URL:
 
-Settings:
+```txt
+https://divinecode.onrender.com
+```
+
+Render settings:
 
 - Root directory: `apps/api`
 - Build command: `npm install && npm run build`
 - Start command: `npm run start`
 - Runtime: Node
 
-Add backend environment variables from the final env section below.
-
-After deploy, copy the Render backend URL. Example:
-
-```txt
-https://divinecode-api.onrender.com
-```
-
-## 2. Frontend deploy on Vercel
+## 2. Frontend on Vercel
 
 Import this GitHub repository in Vercel.
 
@@ -34,8 +30,6 @@ Settings:
 - Root directory: `apps/web`
 - Build command: `npm run build`
 - Output: default Next.js output
-
-Add frontend environment variables from the final env section below.
 
 After deploy, copy the Vercel frontend URL. Example:
 
@@ -88,8 +82,8 @@ JUDGE0_URL=https://YOUR_JUDGE0_URL
 ### apps/web on Vercel
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://YOUR_RENDER_API.onrender.com
-NEXT_PUBLIC_SOCKET_URL=https://YOUR_RENDER_API.onrender.com
+NEXT_PUBLIC_API_BASE_URL=https://divinecode.onrender.com
+NEXT_PUBLIC_SOCKET_URL=https://divinecode.onrender.com
 NEXTAUTH_URL=https://YOUR_VERCEL_APP.vercel.app
 NEXTAUTH_SECRET=generate-a-strong-random-secret
 GOOGLE_CLIENT_ID=your-google-client-id
