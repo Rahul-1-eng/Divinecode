@@ -55,6 +55,18 @@ type DuelRoom = {
 
 type JudgeLanguage = 'cpp' | 'c' | 'java' | 'python' | 'javascript';
 
+type Judge0Result = {
+  stdout?: string | null;
+  stderr?: string | null;
+  compile_output?: string | null;
+  time?: string | number | null;
+  memory?: number | null;
+  status?: {
+    id?: number;
+    description?: string;
+  } | null;
+};
+
 const languageMap: Record<JudgeLanguage, number> = {
   cpp: 54,
   c: 50,
@@ -153,7 +165,7 @@ async function runWithJudge0(params: {
     };
   }
 
-  const result = await createResponse.json();
+  const result = (await createResponse.json()) as Judge0Result;
   const statusDescription = result.status?.description || 'Unknown';
   let verdict = statusDescription;
 
