@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
-import { mcqQuestions } from './data/mcq';
 
 const app = express();
 app.use(cors());
@@ -15,6 +14,30 @@ const io = new Server(server, {
     methods: ['GET', 'POST']
   }
 });
+
+const mcqQuestions = [
+  {
+    id: 1,
+    question: 'What is the output of console.log(0.1 + 0.2 === 0.3)?',
+    options: ['true', 'false', 'undefined', 'error'],
+    correctIndex: 1,
+    concept: 'floating point precision'
+  },
+  {
+    id: 2,
+    question: 'Which data structure gives O(1) average lookup?',
+    options: ['Array', 'Stack', 'Hash Set', 'Queue'],
+    correctIndex: 2,
+    concept: 'hashing'
+  },
+  {
+    id: 3,
+    question: 'Binary search requires the array to be:',
+    options: ['random', 'sorted', 'empty', 'circular'],
+    correctIndex: 1,
+    concept: 'binary search'
+  }
+];
 
 type Player = {
   id: string;
@@ -53,25 +76,12 @@ app.get('/api/problems/:id', (req, res) => {
   return res.json(problem);
 });
 
-app.get('/api/leaderboard', (_req, res) => {
-  res.json([
-    { rank: 1, username: 'grace_coder', rating: 1780, wins: 14 },
-    { rank: 2, username: 'divine_logic', rating: 1690, wins: 11 },
-    { rank: 3, username: 'honest_algo', rating: 1540, wins: 7 }
-  ]);
-});
-
 app.post('/api/submit', (req, res) => {
   const { code, language, problemId } = req.body;
   if (!code || !language || !problemId) {
     return res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' });
   }
-  return res.json({
-    verdict: 'Accepted',
-    message: 'Mock judge verdict. Connect Judge0 next for real compilation and hidden tests.',
-    language,
-    problemId
-  });
+  return res.json({ verdict: 'Accepted', message: 'Mock judge verdict. Judge0 will be connected next.', language, problemId });
 });
 
 function publicQuestion(room: DuelRoom) {
@@ -97,6 +107,8 @@ function emitRoom(room: DuelRoom) {
 }
 
 io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+
   socket.on('duel:join', (payload: { name?: string }) => {
     const player: Player = {
       id: socket.id,
@@ -111,7 +123,7 @@ io.on('connection', (socket) => {
     }
 
     const opponent = waitingPlayers.shift()!;
-    const roomId = `room-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const roomId = `room-${Date.now()}`;
     const room: DuelRoom = {
       id: roomId,
       players: [opponent, player],
@@ -138,8 +150,7 @@ io.on('connection', (socket) => {
     if (!player || current.id !== payload.questionId) return;
 
     const correct = current.correctIndex === payload.answerIndex;
-    if (correct) player.score += 10;
-    else player.score -= 3;
+    player.score += correct ? 10 : -3;
 
     io.to(room.id).emit('duel:feedback', {
       playerId: socket.id,
@@ -150,9 +161,7 @@ io.on('connection', (socket) => {
     });
 
     room.questionIndex += 1;
-    if (room.questionIndex >= room.questions.length) {
-      room.finished = true;
-    }
+    if (room.questionIndex >= room.questions.length) room.finished = true;
 
     setTimeout(() => emitRoom(room), 700);
   });
@@ -160,6 +169,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const waitingIndex = waitingPlayers.findIndex((p) => p.id === socket.id);
     if (waitingIndex >= 0) waitingPlayers.splice(waitingIndex, 1);
+    console.log('Socket disconnected:', socket.id);
   });
 });
 
