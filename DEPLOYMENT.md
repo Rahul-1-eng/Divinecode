@@ -12,7 +12,7 @@ This repo is a monorepo with:
 
 ## Current remaining setup
 
-Google OAuth client ID is ready. You still need to add the Google client secret and database/Judge0 values in the hosting dashboards.
+Google OAuth client ID is ready. Add secrets only in Vercel/Render dashboards, not in GitHub.
 
 ## 1. Render backend settings
 
@@ -90,7 +90,7 @@ Use a public reachable Judge0 endpoint for production. Local Judge0 only works l
 ```env
 PORT=4000
 CLIENT_ORIGIN=https://divinecode-web.vercel.app
-MONGODB_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/divinecode
+MONGODB_URI=mongodb+srv://Rahul_Kumar_Sahoo:REPLACE_WITH_YOUR_MONGODB_PASSWORD@cluster0.ktysgyz.mongodb.net/divinecode?retryWrites=true&w=majority&appName=Cluster0
 MONGODB_DB=divinecode
 JUDGE0_URL=https://YOUR_JUDGE0_URL
 ```
