@@ -1,38 +1,53 @@
 import { useEffect, useState } from 'react';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
+
 export default function ContestsPage() {
   const [contests, setContests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   async function loadContests() {
-    const res = await fetch('http://localhost:4000/api/contests');
-    const data = await res.json();
-    setContests(data);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/contests`);
+      const data = await res.json();
+      setContests(Array.isArray(data) ? data : []);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => {
-    loadContests();
-  }, []);
+  useEffect(() => { loadContests(); }, []);
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'Arial, sans-serif' }}>
-      <h1>DivineCode Gym Contests</h1>
-      <p>Create Codeforces Gym-style group contests using problems from any platform.</p>
-      <a href="/contests/create">
-        <button style={{ padding: '10px 16px', cursor: 'pointer' }}>Create Gym Contest</button>
-      </a>
-
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Available Contests</h2>
-        {contests.length === 0 && <p>No contests yet. Create your first one.</p>}
-        {contests.map((contest) => (
-          <div key={contest.id} style={{ border: '1px solid #ddd', padding: '1rem', marginBottom: '1rem' }}>
-            <h3>{contest.title}</h3>
-            <p>{contest.description}</p>
-            <p>Members: {contest.membersCount} | Problems: {contest.problemsCount} | Duration: {contest.durationMinutes} min</p>
-            <a href={`/contests/${contest.id}`}>Open Contest Room</a>
-          </div>
-        ))}
+    <main style={page}>
+      <section style={{ maxWidth: 1180, margin: '0 auto' }}>
+        <nav style={nav}><a href="/" style={brand}>DivineCode</a><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><a href="/signin" style={pill}>Login</a><a href="/duel" style={pill}>Duel</a><a href="/contests/create" style={primary}>Create Mashup</a></div></nav>
+        <div style={hero}><p style={eyebrow}>Gym dashboard</p><h1 style={{ fontSize: 'clamp(42px,7vw,78px)', margin: 0, letterSpacing: '-.07em' }}>Contest rooms that feel alive.</h1><p style={{ color: '#a8b3c7', maxWidth: 720, lineHeight: 1.75 }}>Create mashups, invite coders, submit from account, and track standings like a real competitive programming arena.</p></div>
+        {loading && <div style={panel}>Loading contests...</div>}
+        {!loading && contests.length === 0 && <div style={panel}><h2>No contests yet</h2><p style={{ color: '#94a3b8' }}>Create your first mashup room and add problems from Codeforces, LeetCode, AtCoder, or CodeChef.</p><a href="/contests/create" style={primary}>Create Mashup</a></div>}
+        <section style={grid}>
+          {contests.map((contest) => (
+            <a href={`/contests/${contest.id}`} key={contest.id} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={tag}>LIVE GYM</span><span style={{ color: '#67e8f9' }}>{contest.durationMinutes}m</span></div>
+              <h2>{contest.title}</h2>
+              <p style={{ color: '#94a3b8', lineHeight: 1.6 }}>{contest.description || 'Private group contest room'}</p>
+              <div style={stats}><span>{contest.membersCount} members</span><span>{contest.problemsCount} problems</span><span>{contest.questionCount || 0} MCQs</span></div>
+            </a>
+          ))}
+        </section>
       </section>
     </main>
   );
 }
+const page = { minHeight: '100vh', padding: 28, fontFamily: 'Inter, Arial, sans-serif', color: '#eef2ff', background: 'radial-gradient(circle at top left, rgba(99,102,241,.32), transparent 34rem), radial-gradient(circle at bottom right, rgba(34,211,238,.18), transparent 30rem), #070a16' };
+const nav = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 18, flexWrap: 'wrap' as const, marginBottom: 42 };
+const brand = { color: '#eef2ff', textDecoration: 'none', fontWeight: 950, fontSize: 24 };
+const pill = { color: '#dbeafe', textDecoration: 'none', padding: '11px 16px', borderRadius: 999, border: '1px solid rgba(148,163,184,.25)', background: 'rgba(15,23,42,.72)' };
+const primary = { display: 'inline-block', color: '#020617', textDecoration: 'none', padding: '12px 17px', borderRadius: 999, background: 'linear-gradient(135deg,#a5b4fc,#22d3ee)', fontWeight: 900 };
+const hero = { padding: 32, borderRadius: 30, border: '1px solid rgba(148,163,184,.22)', background: 'rgba(15,23,42,.72)', boxShadow: '0 28px 90px rgba(0,0,0,.32)', marginBottom: 24 };
+const eyebrow = { color: '#67e8f9', fontWeight: 900, letterSpacing: '.14em', textTransform: 'uppercase' as const };
+const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 18 };
+const panel = { padding: 26, borderRadius: 26, border: '1px solid rgba(148,163,184,.22)', background: 'rgba(15,23,42,.82)', marginBottom: 18 };
+const card = { color: '#eef2ff', textDecoration: 'none', padding: 24, borderRadius: 26, border: '1px solid rgba(148,163,184,.22)', background: 'linear-gradient(180deg,rgba(15,23,42,.88),rgba(2,6,23,.68))', boxShadow: '0 20px 70px rgba(0,0,0,.28)' };
+const tag = { padding: '6px 10px', borderRadius: 999, color: '#020617', background: '#67e8f9', fontWeight: 900, fontSize: 12 };
+const stats = { display: 'flex', gap: 10, flexWrap: 'wrap' as const, color: '#cbd5e1', marginTop: 18 };
