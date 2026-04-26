@@ -16,7 +16,7 @@ type Player = { id: string; name: string; score: number };
 type DuelRoom = { id: string; players: Player[]; questionIndex: number; questions: McqQuestion[]; finished: boolean };
 type JudgeLanguage = 'cpp' | 'c' | 'java' | 'python' | 'javascript';
 type Judge0Result = { stdout?: string | null; stderr?: string | null; compile_output?: string | null; time?: string | number | null; memory?: number | null; status?: { id?: number; description?: string } | null };
-type ContestProblem = { id: string; title: string; platform: string; url: string; difficulty?: string; tags: string[] };
+type ContestProblem = { id: string; title: string; platform: string; url: string; difficulty?: string; tags: string[]; stdin?: string; expectedOutput?: string };
 type ContestMember = { id: string; name: string; handle?: string; team?: string };
 type ContestSolve = { memberId: string; problemId: string; solvedAtMinute: number; attempts: number };
 type StandingRow = { memberId: string; name: string; solved: number; penalty: number; score: number; solvedProblems: string[] };
@@ -68,6 +68,14 @@ function rebuildStandings(contest: Contest) {
     return { memberId: member.id, name: member.name, solved: memberSolves.length, penalty, score: memberSolves.length * 1000 - penalty, solvedProblems };
   }).sort((a, b) => b.solved - a.solved || a.penalty - b.penalty || a.name.localeCompare(b.name));
 }
+function recordSolve(contest: Contest, memberId: string, problemId: string) {
+  const existing = contest.solves.find((s) => s.memberId === memberId && s.problemId === problemId);
+  if (existing) return existing;
+  const solve = { memberId, problemId, solvedAtMinute: getContestMinute(contest), attempts: 1 };
+  contest.solves.push(solve);
+  rebuildStandings(contest);
+  return solve;
+}
 function serializeContestList(contest: Contest) {
   return { id: contest.id, title: contest.title, description: contest.description, startTime: contest.startTime, durationMinutes: contest.durationMinutes, isRated: contest.isRated, membersCount: contest.members.length, problemsCount: contest.problems.length, questionCount: contest.questions.length, createdAt: contest.createdAt };
 }
@@ -94,7 +102,7 @@ app.post('/api/contests', (req, res) => {
     const contestCode = String(p.contestCode || '');
     const problemIndex = String(p.problemIndex || '');
     const url = buildProblemUrl(platform, contestCode, problemIndex, String(p.url || ''));
-    return { id: id('problem'), title: String(p.title || `${platform} ${contestCode}${problemIndex}`).trim(), platform, url, difficulty: p.difficulty ? String(p.difficulty) : problemIndex || undefined, tags: String(p.tags || platform).split(',').map((t) => t.trim()).filter(Boolean) };
+    return { id: id('problem'), title: String(p.title || `${platform} ${contestCode}${problemIndex}`).trim(), platform, url, difficulty: p.difficulty ? String(p.difficulty) : problemIndex || undefined, tags: String(p.tags || platform).split(',').map((t) => t.trim()).filter(Boolean), stdin: String(p.stdin || ''), expectedOutput: String(p.expectedOutput || '') };
   }).filter((p) => p.title && p.url) : [];
   if (safeMembers.length === 0) return res.status(400).json({ error: 'Add at least one contest member' });
   if (safeProblems.length === 0) return res.status(400).json({ error: 'Add at least one valid problem with a platform code or URL' });
@@ -122,7 +130,7 @@ app.post('/api/contests/:id/problems', (req, res) => {
   const contest = contests.get(req.params.id);
   if (!contest) return res.status(404).json({ error: 'Contest not found' });
   const platform = String(req.body.platform || 'External');
-  const problem: ContestProblem = { id: id('problem'), title: String(req.body.title || 'Untitled Problem'), platform, url: buildProblemUrl(platform, String(req.body.contestCode || ''), String(req.body.problemIndex || ''), String(req.body.url || '')), difficulty: req.body.difficulty ? String(req.body.difficulty) : undefined, tags: String(req.body.tags || platform).split(',').map((t) => t.trim()).filter(Boolean) };
+  const problem: ContestProblem = { id: id('problem'), title: String(req.body.title || 'Untitled Problem'), platform, url: buildProblemUrl(platform, String(req.body.contestCode || ''), String(req.body.problemIndex || ''), String(req.body.url || '')), difficulty: req.body.difficulty ? String(req.body.difficulty) : undefined, tags: String(req.body.tags || platform).split(',').map((t) => t.trim()).filter(Boolean), stdin: String(req.body.stdin || ''), expectedOutput: String(req.body.expectedOutput || '') };
   if (!problem.url) return res.status(400).json({ error: 'Problem URL is required' });
   contest.problems.push(problem);
   contest.questions = generateMcqsFromProblems(contest.problems);
@@ -136,8 +144,7 @@ app.post('/api/contests/:id/solve', (req, res) => {
   const member = contest.members.find((m) => m.id === memberId);
   const problem = contest.problems.find((p) => p.id === problemId);
   if (!member || !problem) return res.status(400).json({ error: 'Invalid member or problem' });
-  if (!contest.solves.find((s) => s.memberId === memberId && s.problemId === problemId)) contest.solves.push({ memberId, problemId, solvedAtMinute: getContestMinute(contest), attempts: 1 });
-  rebuildStandings(contest);
+  recordSolve(contest, memberId, problemId);
   return res.json(contest);
 });
 app.post('/api/contests/:id/unsolve', (req, res) => {
@@ -151,6 +158,7 @@ app.post('/api/contests/:id/unsolve', (req, res) => {
 
 async function runWithJudge0(params: { sourceCode: string; language: JudgeLanguage; stdin: string; expectedOutput: string }) {
   const judgeUrl = process.env.JUDGE0_URL;
+  if (!params.expectedOutput) return { verdict: 'Accepted', message: 'No sample output configured, accepted as external-platform submission.', stdout: '', stderr: '', compile_output: '' };
   if (!judgeUrl) return { verdict: 'Mock Accepted', message: 'JUDGE0_URL is not configured. Start Judge0 and set JUDGE0_URL for real judging.', stdout: '', stderr: '', compile_output: '' };
   const createResponse = await fetch(`${judgeUrl}/submissions?base64_encoded=false&wait=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_code: params.sourceCode, language_id: languageMap[params.language], stdin: params.stdin, expected_output: params.expectedOutput }) });
   if (!createResponse.ok) return { verdict: 'Judge Error', message: `Judge0 request failed with status ${createResponse.status}`, stdout: '', stderr: '', compile_output: '' };
@@ -162,13 +170,28 @@ async function runWithJudge0(params: { sourceCode: string; language: JudgeLangua
 }
 app.post('/api/submit', async (req, res) => {
   try {
-    const { code, language, problemId } = req.body;
+    const { code, language, problemId, contestId, memberId } = req.body;
     if (!code || !language || !problemId) return res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' });
     if (!languageMap[language as JudgeLanguage]) return res.status(400).json({ verdict: 'Rejected', message: 'Unsupported language' });
-    const problem = problems.find((item) => item.id === Number(problemId));
-    if (!problem) return res.status(404).json({ verdict: 'Rejected', message: 'Problem not found' });
-    const result = await runWithJudge0({ sourceCode: code, language: language as JudgeLanguage, stdin: problem.stdin, expectedOutput: problem.expectedOutput });
-    return res.json({ ...result, language, problemId });
+    let stdin = '';
+    let expectedOutput = '';
+    let contest: Contest | undefined;
+    if (contestId) {
+      contest = contests.get(String(contestId));
+      if (!contest) return res.status(404).json({ verdict: 'Rejected', message: 'Contest not found' });
+      const contestProblem = contest.problems.find((item) => item.id === String(problemId));
+      if (!contestProblem) return res.status(404).json({ verdict: 'Rejected', message: 'Contest problem not found' });
+      stdin = contestProblem.stdin || '';
+      expectedOutput = contestProblem.expectedOutput || '';
+    } else {
+      const problem = problems.find((item) => item.id === Number(problemId));
+      if (!problem) return res.status(404).json({ verdict: 'Rejected', message: 'Problem not found' });
+      stdin = problem.stdin;
+      expectedOutput = problem.expectedOutput;
+    }
+    const result = await runWithJudge0({ sourceCode: code, language: language as JudgeLanguage, stdin, expectedOutput });
+    if ((result.verdict === 'Accepted' || result.verdict === 'Mock Accepted') && contest && memberId) recordSolve(contest, String(memberId), String(problemId));
+    return res.json({ ...result, language, problemId, contestId: contest?.id, standings: contest?.standings || null });
   } catch (error) {
     return res.status(500).json({ verdict: 'Server Error', message: error instanceof Error ? error.message : 'Unknown error' });
   }
