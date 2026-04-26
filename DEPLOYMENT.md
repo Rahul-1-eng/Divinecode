@@ -12,7 +12,7 @@ This repo is a monorepo with:
 
 ## Current remaining setup
 
-You said Google OAuth and database setup are not done yet. Complete these before expecting login and persistent contests to work in production.
+Google OAuth client ID is ready. You still need to add the Google client secret and database/Judge0 values in the hosting dashboards.
 
 ## 1. Render backend settings
 
@@ -65,7 +65,7 @@ http://localhost:3000/api/auth/callback/google
 
 ## 4. MongoDB Atlas setup
 
-Create a MongoDB Atlas cluster and database named:
+Create a MongoDB Atlas M0 free cluster and database named:
 
 ```txt
 divinecode
@@ -102,7 +102,7 @@ NEXT_PUBLIC_API_BASE_URL=https://divinecode.onrender.com
 NEXT_PUBLIC_SOCKET_URL=https://divinecode.onrender.com
 NEXTAUTH_URL=https://divinecode-web.vercel.app
 NEXTAUTH_SECRET=generate-a-strong-random-secret
-GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_ID=897519233396-vftvn746e5ev146j9uinpng47ka225i4.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
