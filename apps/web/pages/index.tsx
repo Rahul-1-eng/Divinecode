@@ -1,11 +1,52 @@
+const features = [
+  { title: 'Login', href: '/signin', icon: '🔐', text: 'Create your coder identity and join rooms faster.' },
+  { title: 'Duel', href: '/duel', icon: '⚔️', text: 'Battle another coder with generated MCQs and live scoring.' },
+  { title: 'Contest', href: '/contests', icon: '🏆', text: 'Browse every group contest room and jump back in.' },
+  { title: 'Group', href: '/contests/create', icon: '👥', text: 'Create a private gym contest with members and problems.' },
+  { title: 'Practice', href: '/contests', icon: '🧠', text: 'Train with platform problems and generated checks.' },
+  { title: 'Judge0', href: '/contests', icon: '⚙️', text: 'Ready for real code execution through Judge0.' }
+];
+
 export default function Home() {
   return (
-    <main style={{ padding: '2rem', fontFamily: 'Arial, sans-serif' }}>
-      <h1>DivineCode Platform</h1>
-      <p>Welcome to DivineCode, your competitive programming and live duel arena.</p>
-      <a href="/duel">
-        <button style={{ padding: '10px 16px', cursor: 'pointer' }}>Go to Duel Arena</button>
-      </a>
+    <main style={{ minHeight: '100vh', padding: 28, fontFamily: 'Inter, Arial, sans-serif', color: '#eef2ff', background: 'radial-gradient(circle at top left, rgba(99,102,241,.35), transparent 36rem), radial-gradient(circle at top right, rgba(34,211,238,.22), transparent 30rem), #070a16' }}>
+      <nav style={{ maxWidth: 1180, margin: '0 auto 42px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'white', textDecoration: 'none', fontWeight: 900, fontSize: 22 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 15, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#a5b4fc,#22d3ee)', color: '#020617' }}>DC</span>
+          DivineCode
+        </a>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {['Login', 'Duel', 'Contest', 'Group'].map((item) => (
+            <a key={item} href={item === 'Login' ? '/signin' : item === 'Duel' ? '/duel' : item === 'Group' ? '/contests/create' : '/contests'} style={{ color: '#dbeafe', textDecoration: 'none', padding: '11px 16px', borderRadius: 999, border: '1px solid rgba(148,163,184,.25)', background: 'rgba(15,23,42,.72)' }}>{item}</a>
+          ))}
+        </div>
+      </nav>
+
+      <section style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 24, alignItems: 'center' }}>
+        <div style={{ padding: 42, borderRadius: 30, border: '1px solid rgba(148,163,184,.22)', background: 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(15,23,42,.62))', boxShadow: '0 28px 90px rgba(0,0,0,.35)' }}>
+          <p style={{ color: '#67e8f9', fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase' }}>Competitive programming arena</p>
+          <h1 style={{ fontSize: 'clamp(44px,7vw,88px)', lineHeight: .92, letterSpacing: '-.08em', margin: '12px 0 18px' }}>Code. Duel. Rank. Repeat.</h1>
+          <p style={{ color: '#cbd5e1', fontSize: 18, lineHeight: 1.75 }}>A beautiful coding platform for group contests, live duels, generated MCQs, standings, problem rooms, and Judge0-ready code execution.</p>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 28 }}>
+            <a href="/contests/create" style={{ color: '#020617', textDecoration: 'none', padding: '13px 18px', borderRadius: 999, fontWeight: 900, background: 'linear-gradient(135deg,#a5b4fc,#22d3ee)' }}>Create Group Contest</a>
+            <a href="/duel" style={{ color: '#e2e8f0', textDecoration: 'none', padding: '13px 18px', borderRadius: 999, border: '1px solid rgba(148,163,184,.28)' }}>Start Duel</a>
+          </div>
+        </div>
+        <div style={{ padding: 28, borderRadius: 30, border: '1px solid rgba(148,163,184,.22)', background: 'rgba(15,23,42,.72)', boxShadow: '0 28px 90px rgba(0,0,0,.3)' }}>
+          <h2 style={{ marginTop: 0 }}>Arena Status</h2>
+          {['Auto-generated MCQs', 'Working group contests', 'Live duel socket server', 'Judge0-ready submissions'].map((x) => <p key={x} style={{ padding: 14, borderRadius: 16, background: 'rgba(2,6,23,.55)', border: '1px solid rgba(148,163,184,.16)' }}>✅ {x}</p>)}
+        </div>
+      </section>
+
+      <section style={{ maxWidth: 1180, margin: '28px auto 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 18 }}>
+        {features.map((feature) => (
+          <a href={feature.href} key={feature.title} style={{ color: '#eef2ff', textDecoration: 'none', padding: 22, borderRadius: 24, border: '1px solid rgba(148,163,184,.22)', background: 'rgba(15,23,42,.72)', boxShadow: '0 18px 60px rgba(0,0,0,.22)' }}>
+            <div style={{ fontSize: 30 }}>{feature.icon}</div>
+            <h3>{feature.title}</h3>
+            <p style={{ color: '#a8b3c7', lineHeight: 1.55 }}>{feature.text}</p>
+          </a>
+        ))}
+      </section>
     </main>
   );
 }
