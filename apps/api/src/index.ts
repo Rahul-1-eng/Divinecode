@@ -53,13 +53,47 @@ type DuelRoom = {
   finished: boolean;
 };
 
+type JudgeLanguage = 'cpp' | 'c' | 'java' | 'python' | 'javascript';
+
+const languageMap: Record<JudgeLanguage, number> = {
+  cpp: 54,
+  c: 50,
+  java: 62,
+  python: 71,
+  javascript: 63
+};
+
 const waitingPlayers: Player[] = [];
 const rooms = new Map<string, DuelRoom>();
 
 const problems = [
-  { id: 1, title: 'Two Sum', difficulty: 800, tags: ['array', 'hash-map'], description: 'Find two indices whose values add up to target.' },
-  { id: 2, title: 'Binary Search', difficulty: 900, tags: ['binary-search'], description: 'Find the target index in a sorted array.' },
-  { id: 3, title: 'Reverse Linked List', difficulty: 1200, tags: ['linked-list'], description: 'Reverse a singly linked list.' }
+  {
+    id: 1,
+    title: 'Two Sum',
+    difficulty: 800,
+    tags: ['array', 'hash-map'],
+    description: 'Find two indices whose values add up to target.',
+    stdin: '4 9\n2 7 11 15\n',
+    expectedOutput: '0 1'
+  },
+  {
+    id: 2,
+    title: 'Binary Search',
+    difficulty: 900,
+    tags: ['binary-search'],
+    description: 'Find the target index in a sorted array.',
+    stdin: '5 7\n1 3 5 7 9\n',
+    expectedOutput: '3'
+  },
+  {
+    id: 3,
+    title: 'Reverse Linked List',
+    difficulty: 1200,
+    tags: ['linked-list'],
+    description: 'Reverse a singly linked list. This problem is still mock-only until full testcases are added.',
+    stdin: '',
+    expectedOutput: ''
+  }
 ];
 
 app.get('/', (_req, res) => {
@@ -67,21 +101,104 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/api/problems', (_req, res) => {
-  res.json(problems);
+  res.json(problems.map(({ stdin, expectedOutput, ...safeProblem }) => safeProblem));
 });
 
 app.get('/api/problems/:id', (req, res) => {
   const problem = problems.find((item) => item.id === Number(req.params.id));
   if (!problem) return res.status(404).json({ error: 'Problem not found' });
-  return res.json(problem);
+  const { stdin, expectedOutput, ...safeProblem } = problem;
+  return res.json(safeProblem);
 });
 
-app.post('/api/submit', (req, res) => {
-  const { code, language, problemId } = req.body;
-  if (!code || !language || !problemId) {
-    return res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' });
+function normalizeOutput(value: string | null | undefined) {
+  return (value || '').trim().replace(/\s+/g, ' ');
+}
+
+async function runWithJudge0(params: {
+  sourceCode: string;
+  language: JudgeLanguage;
+  stdin: string;
+  expectedOutput: string;
+}) {
+  const judgeUrl = process.env.JUDGE0_URL;
+  if (!judgeUrl) {
+    return {
+      verdict: 'Mock Accepted',
+      message: 'JUDGE0_URL is not configured. Start Judge0 and set JUDGE0_URL for real judging.',
+      stdout: '',
+      stderr: '',
+      compile_output: ''
+    };
   }
-  return res.json({ verdict: 'Accepted', message: 'Mock judge verdict. Judge0 will be connected next.', language, problemId });
+
+  const createResponse = await fetch(`${judgeUrl}/submissions?base64_encoded=false&wait=true`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_code: params.sourceCode,
+      language_id: languageMap[params.language],
+      stdin: params.stdin,
+      expected_output: params.expectedOutput
+    })
+  });
+
+  if (!createResponse.ok) {
+    return {
+      verdict: 'Judge Error',
+      message: `Judge0 request failed with status ${createResponse.status}`,
+      stdout: '',
+      stderr: '',
+      compile_output: ''
+    };
+  }
+
+  const result = await createResponse.json();
+  const statusDescription = result.status?.description || 'Unknown';
+  let verdict = statusDescription;
+
+  if (statusDescription === 'Accepted') {
+    const actual = normalizeOutput(result.stdout);
+    const expected = normalizeOutput(params.expectedOutput);
+    verdict = actual === expected ? 'Accepted' : 'Wrong Answer';
+  }
+
+  return {
+    verdict,
+    message: statusDescription,
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+    compile_output: result.compile_output || '',
+    time: result.time || null,
+    memory: result.memory || null
+  };
+}
+
+app.post('/api/submit', async (req, res) => {
+  try {
+    const { code, language, problemId } = req.body;
+    if (!code || !language || !problemId) {
+      return res.status(400).json({ verdict: 'Rejected', message: 'code, language and problemId are required' });
+    }
+
+    if (!languageMap[language as JudgeLanguage]) {
+      return res.status(400).json({ verdict: 'Rejected', message: 'Unsupported language' });
+    }
+
+    const problem = problems.find((item) => item.id === Number(problemId));
+    if (!problem) return res.status(404).json({ verdict: 'Rejected', message: 'Problem not found' });
+
+    const result = await runWithJudge0({
+      sourceCode: code,
+      language: language as JudgeLanguage,
+      stdin: problem.stdin,
+      expectedOutput: problem.expectedOutput
+    });
+
+    return res.json({ ...result, language, problemId });
+  } catch (error) {
+    return res.status(500).json({ verdict: 'Server Error', message: error instanceof Error ? error.message : 'Unknown error' });
+  }
 });
 
 function publicQuestion(room: DuelRoom) {
