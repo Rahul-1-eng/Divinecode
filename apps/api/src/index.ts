@@ -8,9 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
+const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
 const mcqQuestions = [
   { id: 1, question: 'What is the output of console.log(0.1 + 0.2 === 0.3)?', options: ['true', 'false', 'undefined', 'error'], correctIndex: 1, concept: 'floating point precision' },
@@ -23,8 +21,10 @@ type DuelRoom = { id: string; players: Player[]; questionIndex: number; question
 type JudgeLanguage = 'cpp' | 'c' | 'java' | 'python' | 'javascript';
 type Judge0Result = { stdout?: string | null; stderr?: string | null; compile_output?: string | null; time?: string | number | null; memory?: number | null; status?: { id?: number; description?: string } | null };
 type ContestProblem = { id: string; title: string; platform: string; url: string; difficulty?: string; tags: string[] };
-type ContestMember = { id: string; name: string; handle?: string };
-type Contest = { id: string; title: string; description: string; startTime: string; durationMinutes: number; isRated: boolean; createdAt: string; members: ContestMember[]; problems: ContestProblem[]; standings: { memberId: string; name: string; solved: number; penalty: number; score: number }[] };
+type ContestMember = { id: string; name: string; handle?: string; team?: string };
+type ContestSolve = { memberId: string; problemId: string; solvedAtMinute: number; attempts: number };
+type StandingRow = { memberId: string; name: string; solved: number; penalty: number; score: number; solvedProblems: string[] };
+type Contest = { id: string; title: string; description: string; startTime: string; durationMinutes: number; isRated: boolean; createdAt: string; members: ContestMember[]; problems: ContestProblem[]; solves: ContestSolve[]; standings: StandingRow[] };
 
 const languageMap: Record<JudgeLanguage, number> = { cpp: 54, c: 50, java: 62, python: 71, javascript: 63 };
 const waitingPlayers: Player[] = [];
@@ -39,7 +39,15 @@ const problems = [
 
 function id(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 function normalizeOutput(value: string | null | undefined) { return (value || '').trim().replace(/\s+/g, ' '); }
-function buildStandings(members: ContestMember[]) { return members.map((member, index) => ({ memberId: member.id, name: member.name, solved: 0, penalty: 0, score: 0 - index })); }
+function getContestMinute(contest: Contest) { return Math.max(1, Math.floor((Date.now() - new Date(contest.startTime).getTime()) / 60000)); }
+function rebuildStandings(contest: Contest) {
+  contest.standings = contest.members.map((member) => {
+    const memberSolves = contest.solves.filter((solve) => solve.memberId === member.id);
+    const solvedProblems = memberSolves.map((solve) => solve.problemId);
+    const penalty = memberSolves.reduce((sum, solve) => sum + solve.solvedAtMinute + Math.max(0, solve.attempts - 1) * 20, 0);
+    return { memberId: member.id, name: member.name, solved: memberSolves.length, penalty, score: memberSolves.length * 1000 - penalty, solvedProblems };
+  }).sort((a, b) => b.solved - a.solved || a.penalty - b.penalty || a.name.localeCompare(b.name));
+}
 
 app.get('/', (_req, res) => res.json({ status: 'ok', app: 'DivineCode API' }));
 app.get('/api/problems', (_req, res) => res.json(problems.map(({ stdin, expectedOutput, ...safeProblem }) => safeProblem)));
@@ -55,9 +63,10 @@ app.get('/api/contests', (_req, res) => res.json([...contests.values()].map((con
 app.post('/api/contests', (req, res) => {
   const { title, description, startTime, durationMinutes, isRated, members, problems: contestProblems } = req.body;
   if (!title) return res.status(400).json({ error: 'Contest title is required' });
-  const safeMembers: ContestMember[] = Array.isArray(members) ? members.filter(Boolean).map((name: string) => ({ id: id('member'), name: String(name).trim() })).filter((m) => m.name) : [];
+  const safeMembers: ContestMember[] = Array.isArray(members) ? members.filter(Boolean).map((name: string) => ({ id: id('member'), name: String(name).trim(), handle: String(name).trim().toLowerCase().replace(/\s+/g, '_') })).filter((m) => m.name) : [];
   const safeProblems: ContestProblem[] = Array.isArray(contestProblems) ? contestProblems.map((p: any) => ({ id: id('problem'), title: String(p.title || 'Untitled Problem'), platform: String(p.platform || 'External'), url: String(p.url || ''), difficulty: p.difficulty ? String(p.difficulty) : undefined, tags: String(p.tags || '').split(',').map((t) => t.trim()).filter(Boolean) })).filter((p) => p.title && p.url) : [];
-  const contest: Contest = { id: id('contest'), title: String(title), description: String(description || ''), startTime: startTime || new Date().toISOString(), durationMinutes: Number(durationMinutes || 120), isRated: Boolean(isRated), members: safeMembers, problems: safeProblems, standings: buildStandings(safeMembers), createdAt: new Date().toISOString() };
+  const contest: Contest = { id: id('contest'), title: String(title), description: String(description || ''), startTime: startTime || new Date().toISOString(), durationMinutes: Number(durationMinutes || 120), isRated: Boolean(isRated), members: safeMembers, problems: safeProblems, solves: [], standings: [], createdAt: new Date().toISOString() };
+  rebuildStandings(contest);
   contests.set(contest.id, contest);
   return res.status(201).json(contest);
 });
@@ -65,6 +74,7 @@ app.post('/api/contests', (req, res) => {
 app.get('/api/contests/:id', (req, res) => {
   const contest = contests.get(req.params.id);
   if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  rebuildStandings(contest);
   return res.json(contest);
 });
 
@@ -72,8 +82,8 @@ app.post('/api/contests/:id/members', (req, res) => {
   const contest = contests.get(req.params.id);
   if (!contest) return res.status(404).json({ error: 'Contest not found' });
   const names: string[] = Array.isArray(req.body.members) ? req.body.members : [req.body.name];
-  names.filter(Boolean).forEach((name) => contest.members.push({ id: id('member'), name: String(name).trim() }));
-  contest.standings = buildStandings(contest.members);
+  names.filter(Boolean).forEach((name) => contest.members.push({ id: id('member'), name: String(name).trim(), handle: String(name).trim().toLowerCase().replace(/\s+/g, '_') }));
+  rebuildStandings(contest);
   return res.json(contest);
 });
 
@@ -83,18 +93,30 @@ app.post('/api/contests/:id/problems', (req, res) => {
   const problem: ContestProblem = { id: id('problem'), title: String(req.body.title || 'Untitled Problem'), platform: String(req.body.platform || 'External'), url: String(req.body.url || ''), difficulty: req.body.difficulty ? String(req.body.difficulty) : undefined, tags: String(req.body.tags || '').split(',').map((t) => t.trim()).filter(Boolean) };
   if (!problem.url) return res.status(400).json({ error: 'Problem URL is required' });
   contest.problems.push(problem);
+  rebuildStandings(contest);
   return res.json(contest);
 });
 
-app.post('/api/contests/:id/standings/mock', (req, res) => {
+app.post('/api/contests/:id/solve', (req, res) => {
   const contest = contests.get(req.params.id);
   if (!contest) return res.status(404).json({ error: 'Contest not found' });
-  contest.standings = contest.members.map((member) => {
-    const solved = Math.floor(Math.random() * (contest.problems.length + 1));
-    const penalty = solved * (20 + Math.floor(Math.random() * 80));
-    return { memberId: member.id, name: member.name, solved, penalty, score: solved * 100 - penalty };
-  }).sort((a, b) => b.solved - a.solved || a.penalty - b.penalty);
-  return res.json(contest.standings);
+  const { memberId, problemId } = req.body;
+  const member = contest.members.find((m) => m.id === memberId);
+  const problem = contest.problems.find((p) => p.id === problemId);
+  if (!member || !problem) return res.status(400).json({ error: 'Invalid member or problem' });
+  const existing = contest.solves.find((s) => s.memberId === memberId && s.problemId === problemId);
+  if (!existing) contest.solves.push({ memberId, problemId, solvedAtMinute: getContestMinute(contest), attempts: 1 });
+  rebuildStandings(contest);
+  return res.json(contest);
+});
+
+app.post('/api/contests/:id/unsolve', (req, res) => {
+  const contest = contests.get(req.params.id);
+  if (!contest) return res.status(404).json({ error: 'Contest not found' });
+  const { memberId, problemId } = req.body;
+  contest.solves = contest.solves.filter((s) => !(s.memberId === memberId && s.problemId === problemId));
+  rebuildStandings(contest);
+  return res.json(contest);
 });
 
 async function runWithJudge0(params: { sourceCode: string; language: JudgeLanguage; stdin: string; expectedOutput: string }) {
