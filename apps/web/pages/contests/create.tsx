@@ -1,6 +1,10 @@
 import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
+export async function getServerSideProps() {
+  return { props: {} };
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
 const fallbackSuggestions = ['Code Warrior', 'Team Alpha', 'Team Beta', 'Tourist', 'Petr', 'Benq', 'Errichto'];
 
