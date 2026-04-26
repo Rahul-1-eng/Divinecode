@@ -1,0 +1,19 @@
+{
+  "name": "divinecode",
+  "version": "0.2.0",
+  "private": true,
+  "description": "DivineCode competitive programming and live duel platform",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "start": "npm run start --workspace apps/api",
+    "install:all": "npm install"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
